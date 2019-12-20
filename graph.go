@@ -1,12 +1,13 @@
 package graph
 
 import (
+	"container/heap"
 	"strconv"
 	"strings"
 	"sync"
 )
 
-// VertexID is an identity for each vertex
+// VertexID is an identity for each vertex.
 type VertexID int
 
 // Graph implements an adjacency list.
@@ -14,7 +15,7 @@ type Graph struct {
 	vertices map[VertexID]*vertex
 }
 
-// Vertex of graph.
+// Vertex of graph. It is safe to copy Vertex.
 type Vertex struct {
 	vertex *vertex
 	// Value stores user defined values.
@@ -31,6 +32,9 @@ type edge struct {
 	to     *vertex
 	weight int
 }
+
+// distanceHeap implements min-heap interface for algorithm operations.
+type distanceHeap []edge
 
 func (id VertexID) String() string {
 	return strconv.Itoa(int(id))
@@ -61,9 +65,48 @@ func (g *Graph) RemoveVertex(id VertexID) bool {
 }
 
 // AddEdge adds a new edge with weight from Vertex to Vertex.
-func (g *Graph) AddEdge(from *Vertex, to *Vertex, weight int) {
+func (g *Graph) AddEdge(from, to Vertex, weight int) {
 	newEdge := edge{to: to.vertex, weight: weight}
 	from.vertex.outgoing = append(from.vertex.outgoing, newEdge)
+}
+
+// ShortestPaths returns shortest paths from source to each other vertices.
+// The value of map[Vertex]int is negative if the Vertex is unreachable
+// from the source.
+func (g *Graph) ShortestPaths(source Vertex) map[Vertex]int {
+	var dists = make(map[Vertex]int)
+	for _, v := range g.vertices {
+		weight := -1
+		if v == source.vertex {
+			weight = 0
+		}
+		dists[v.container] = weight
+	}
+
+	distHeap := distanceHeap(make([]edge, 0, len(dists)))
+	for v, w := range dists {
+		distHeap = append(distHeap, edge{
+			to:     v.vertex,
+			weight: w,
+		})
+	}
+	heap.Init(&distHeap)
+
+	// Dijkstra's algorithm
+	for i := 0; i < len(dists); i++ {
+		closestEdge := heap.Pop(&distHeap).(edge)
+		if closestEdge.weight < 0 {
+			break
+		}
+		for _, e := range closestEdge.to.outgoing {
+			weight := closestEdge.weight + e.weight
+			if dists[e.to.container] < 0 || weight < dists[e.to.container] {
+				dists[e.to.container] = weight
+				distHeap.update(e.to, weight)
+			}
+		}
+	}
+	return dists
 }
 
 func (g *Graph) String() string {
@@ -92,7 +135,7 @@ func (v *vertex) removeEdge(dest VertexID) (removed bool) {
 
 func (v *vertex) String() string {
 	format := func(id VertexID) string {
-		return "[" + v.id.String() + "]"
+		return "[" + id.String() + "]"
 	}
 	var result strings.Builder
 	result.WriteString(format(v.id))
@@ -107,6 +150,43 @@ func (v *vertex) String() string {
 	}
 	result.WriteString(strings.Join(IDs, ", "))
 	return result.String()
+}
+
+func (d distanceHeap) Len() int { return len(d) }
+
+func (d distanceHeap) Less(i, j int) bool {
+	wi, wj := d[i].weight, d[j].weight
+	// treat negative numbers as if it is greater than any positive numbers.
+	if wi < 0 {
+		return false
+	} else if wj < 0 {
+		return true
+	}
+	return wi < wj
+}
+
+func (d distanceHeap) Swap(i, j int) { d[i], d[j] = d[j], d[i] }
+
+func (d *distanceHeap) Push(x interface{}) {
+	*d = append(*d, x.(edge))
+}
+
+func (d *distanceHeap) Pop() interface{} {
+	old := *d
+	size := len(old)
+	popped := old[size-1]
+	*d = old[:size-1]
+	return popped
+}
+
+func (d distanceHeap) update(v *vertex, weight int) {
+	for i, e := range d {
+		if v == e.to {
+			d[i].weight = weight
+			heap.Fix(&d, i)
+			return
+		}
+	}
 }
 
 var vertexIDGenrator = func() func() VertexID {
