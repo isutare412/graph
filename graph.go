@@ -2,6 +2,7 @@ package graph
 
 import (
 	"container/heap"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -12,7 +13,8 @@ type VertexID int
 
 // Graph implements an adjacency list.
 type Graph struct {
-	vertices map[VertexID]*vertex
+	vertices   map[VertexID]*vertex
+	generateID func() VertexID
 }
 
 // Vertex of graph. It is safe to copy Vertex.
@@ -33,6 +35,11 @@ type edge struct {
 	weight int
 }
 
+// Path implements specific path to a vertex.
+type Path struct {
+	edges []edge
+}
+
 // distanceHeap implements min-heap interface for algorithm operations.
 type distanceHeap []edge
 
@@ -42,7 +49,7 @@ func (id VertexID) String() string {
 
 // NewVertex returns a new vertex which is ready to use.
 func (g *Graph) NewVertex() Vertex {
-	newVertex := &vertex{id: vertexIDGenrator()}
+	newVertex := &vertex{id: g.generateID()}
 	newVertex.container = Vertex{
 		vertex: newVertex,
 		Value:  new(interface{}),
@@ -71,38 +78,45 @@ func (g *Graph) AddEdge(from, to Vertex, weight int) {
 }
 
 // ShortestPaths returns shortest paths from source to each other vertices.
-// The value of map[Vertex]int is negative if the Vertex is unreachable
-// from the source.
-func (g *Graph) ShortestPaths(source Vertex) map[Vertex]int {
-	var dists = make(map[Vertex]int)
+func (g *Graph) ShortestPaths(source Vertex) map[Vertex]Path {
+	var dists = make(map[Vertex]Path)
 	for _, v := range g.vertices {
-		weight := -1
-		if v == source.vertex {
-			weight = 0
+		if v != source.vertex {
+			dists[v.container] = Path{}
 		}
-		dists[v.container] = weight
 	}
 
-	distHeap := distanceHeap(make([]edge, 0, len(dists)))
-	for v, w := range dists {
+	distHeap := distanceHeap(make([]edge, 0, len(dists)+1))
+	distHeap = append(distHeap, edge{
+		to:     source.vertex,
+		weight: 0,
+	})
+	for v := range dists {
 		distHeap = append(distHeap, edge{
 			to:     v.vertex,
-			weight: w,
+			weight: -1,
 		})
 	}
 	heap.Init(&distHeap)
 
 	// Dijkstra's algorithm
-	for i := 0; i < len(dists); i++ {
+	entireSize := len(distHeap)
+	for i := 0; i < entireSize; i++ {
 		closestEdge := heap.Pop(&distHeap).(edge)
 		if closestEdge.weight < 0 {
 			break
 		}
 		for _, e := range closestEdge.to.outgoing {
-			weight := closestEdge.weight + e.weight
-			if dists[e.to.container] < 0 || weight < dists[e.to.container] {
-				dists[e.to.container] = weight
-				distHeap.update(e.to, weight)
+			if e.to == source.vertex {
+				continue
+			}
+			newW := closestEdge.weight + e.weight
+			oldW := dists[e.to.container].Distance()
+			if oldW < 0 || newW < oldW {
+				fixedPath := dists[closestEdge.to.container]
+				fixedPath.addEdge(e)
+				dists[e.to.container] = fixedPath
+				distHeap.update(e.to, newW)
 			}
 		}
 	}
@@ -152,6 +166,51 @@ func (v *vertex) String() string {
 	return result.String()
 }
 
+func (e edge) String() string {
+	return fmt.Sprintf("->%d [%v]", e.weight, e.to.id)
+}
+
+// Destination returns the destination of current path. ok is false if
+// the Path does not include any Vertex.
+func (p Path) Destination() (dest Vertex, ok bool) {
+	if len(p.edges) == 0 {
+		return dest, false
+	}
+	return p.edges[len(p.edges)-1].to.container, true
+}
+
+// Distance returns a total distance to the destination. Returns negative
+// number if the Path does not include any Vertex.
+func (p Path) Distance() int {
+	if len(p.edges) == 0 {
+		return -1
+	}
+	var distance int
+	for _, e := range p.edges {
+		distance += e.weight
+	}
+	return distance
+}
+
+func (p Path) String() string {
+	var builder strings.Builder
+	for i, e := range p.edges {
+		builder.WriteString(e.String())
+		if i != len(p.edges)-1 {
+			builder.WriteByte(' ')
+		}
+	}
+	return builder.String()
+}
+
+func (p *Path) addEdge(target edge) error {
+	if target.weight < 0 {
+		return fmt.Errorf("cannot add edge with a negative weight")
+	}
+	p.edges = append(p.edges, target)
+	return nil
+}
+
 func (d distanceHeap) Len() int { return len(d) }
 
 func (d distanceHeap) Less(i, j int) bool {
@@ -189,18 +248,19 @@ func (d distanceHeap) update(v *vertex, weight int) {
 	}
 }
 
-var vertexIDGenrator = func() func() VertexID {
-	var vertexIDLast VertexID
-	var vertexIDLock sync.Mutex
-	return func() VertexID {
-		vertexIDLock.Lock()
-		defer vertexIDLock.Unlock()
-		vertexIDLast++
-		return vertexIDLast
-	}
-}()
-
 // New returns initialized Graph.
 func New() *Graph {
-	return &Graph{vertices: make(map[VertexID]*vertex)}
+	return &Graph{
+		vertices: make(map[VertexID]*vertex),
+		generateID: func() func() VertexID {
+			var vertexIDLast VertexID
+			var vertexIDLock sync.Mutex
+			return func() VertexID {
+				vertexIDLock.Lock()
+				defer vertexIDLock.Unlock()
+				vertexIDLast++
+				return vertexIDLast
+			}
+		}(),
+	}
 }
