@@ -77,6 +77,12 @@ func (g *Graph) AddEdge(from, to Vertex, weight int) {
 	from.vertex.outgoing = append(from.vertex.outgoing, newEdge)
 }
 
+// RemoveEdges removes all edges from 'from' to 'to'. The other ways (from 'to'
+// to 'from') are not removed.
+func (g *Graph) RemoveEdges(from, to Vertex) {
+	from.vertex.removeEdge(to.ID())
+}
+
 // ShortestPaths returns shortest paths from source to each other vertices.
 func (g *Graph) ShortestPaths(source Vertex) map[Vertex]Path {
 	var dists = make(map[Vertex]Path)
@@ -141,6 +147,7 @@ func (v *vertex) removeEdge(dest VertexID) (removed bool) {
 		if v.outgoing[i].to.id == dest {
 			v.outgoing[i] = v.outgoing[len(v.outgoing)-1]
 			v.outgoing = v.outgoing[:len(v.outgoing)-1]
+			i--
 			removed = true
 		}
 	}

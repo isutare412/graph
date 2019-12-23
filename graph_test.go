@@ -23,6 +23,28 @@ func TestPrintGraph(t *testing.T) {
 	t.Log(graph.String())
 }
 
+func TestRemoveEdges(t *testing.T) {
+	graph := New()
+	vertices := []Vertex{
+		graph.NewVertex(),
+		graph.NewVertex(),
+		graph.NewVertex(),
+		graph.NewVertex(),
+		graph.NewVertex(),
+		graph.NewVertex(),
+	}
+	graph.AddEdge(vertices[0], vertices[2], 1)
+	graph.AddEdge(vertices[0], vertices[2], 2)
+	graph.AddEdge(vertices[2], vertices[4], 2)
+	graph.AddEdge(vertices[3], vertices[5], 4)
+	graph.AddEdge(vertices[4], vertices[5], 5)
+	graph.AddEdge(vertices[5], vertices[1], 6)
+	t.Log(graph.String())
+
+	graph.RemoveEdges(vertices[0], vertices[2])
+	t.Log(graph.String())
+}
+
 func TestShortestPaths(t *testing.T) {
 	printResult := func(result map[Vertex]Path) {
 		var keys []Vertex
