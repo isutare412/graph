@@ -11,8 +11,20 @@ import (
 // VertexID is an identity for each vertex.
 type VertexID int
 
-// Graph implements an adjacency list.
+// Type enumerates type of Graph.
+type Type int8
+
+const (
+	// Directional graph. A -> B != B -> A.
+	Directional Type = iota
+	// Bidirectional graph. A <-> B.
+	Bidirectional
+)
+
+// Graph implements an adjacency list. You should create a Graph by calling
+// New(Type) function.
 type Graph struct {
+	Type
 	vertices   map[VertexID]*vertex
 	generateID func() VertexID
 }
@@ -73,17 +85,28 @@ func (g *Graph) RemoveVertex(id VertexID) bool {
 
 // AddEdge adds a new edge with weight from Vertex to Vertex.
 func (g *Graph) AddEdge(from, to Vertex, weight int) {
-	newEdge := edge{to: to.vertex, weight: weight}
-	from.vertex.outgoing = append(from.vertex.outgoing, newEdge)
+	from.vertex.outgoing = append(from.vertex.outgoing, edge{
+		to:     to.vertex,
+		weight: weight,
+	})
+	if g.Type == Bidirectional {
+		to.vertex.outgoing = append(to.vertex.outgoing, edge{
+			to:     from.vertex,
+			weight: weight,
+		})
+	}
 }
 
-// RemoveEdges removes all edges from 'from' to 'to'. The other ways (from 'to'
-// to 'from') are not removed.
+// RemoveEdges removes all edges from 'from' to 'to'. If Type of g is
+// Directional, the other edges (from 'to' to 'from') are not removed.
 func (g *Graph) RemoveEdges(from, to Vertex) {
 	from.vertex.removeEdge(to.ID())
+	if g.Type == Bidirectional {
+		to.vertex.removeEdge(from.ID())
+	}
 }
 
-// ShortestPaths returns shortest paths from source to each other vertices.
+// ShortestPaths returns shortest paths from source to every other vertices.
 func (g *Graph) ShortestPaths(source Vertex) map[Vertex]Path {
 	var dists = make(map[Vertex]Path)
 	for _, v := range g.vertices {
@@ -92,7 +115,7 @@ func (g *Graph) ShortestPaths(source Vertex) map[Vertex]Path {
 		}
 	}
 
-	distHeap := distanceHeap(make([]edge, 0, len(dists)+1))
+	var distHeap = distanceHeap(make([]edge, 0, len(dists)+1))
 	distHeap = append(distHeap, edge{
 		to:     source.vertex,
 		weight: 0,
@@ -178,7 +201,7 @@ func (e edge) String() string {
 }
 
 // Destination returns the destination of current path. ok is false if
-// the Path does not include any Vertex.
+// the Path does not include any Vertex yet.
 func (p Path) Destination() (dest Vertex, ok bool) {
 	if len(p.edges) == 0 {
 		return dest, false
@@ -256,8 +279,9 @@ func (d distanceHeap) update(v *vertex, weight int) {
 }
 
 // New returns initialized Graph.
-func New() *Graph {
+func New(t Type) *Graph {
 	return &Graph{
+		Type:     t,
 		vertices: make(map[VertexID]*vertex),
 		generateID: func() func() VertexID {
 			var vertexIDLast VertexID
