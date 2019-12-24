@@ -8,3 +8,9 @@ spanning tree, etc.
 - Directional graph.
 - Bidirectional graph.
 - Shortest paths. (Dijkstra)
+
+## Install
+
+```
+go get -d github.com/isutare412/graph
+```

@@ -111,6 +111,40 @@ func TestShortestPaths(t *testing.T) {
 	printResult(shortestPaths)
 }
 
+func TestShortestPath(t *testing.T) {
+	graph := New(Directional)
+	vertices := []Vertex{
+		graph.NewVertex(),
+		graph.NewVertex(),
+		graph.NewVertex(),
+		graph.NewVertex(),
+		graph.NewVertex(),
+		graph.NewVertex(),
+		graph.NewVertex(),
+		graph.NewVertex(),
+	}
+	graph.AddEdge(vertices[0], vertices[1], 4)
+	graph.AddEdge(vertices[0], vertices[2], 5)
+	graph.AddEdge(vertices[0], vertices[4], 3)
+	graph.AddEdge(vertices[1], vertices[3], 1)
+	graph.AddEdge(vertices[2], vertices[4], 4)
+	graph.AddEdge(vertices[2], vertices[5], 5)
+	graph.AddEdge(vertices[2], vertices[7], 3)
+	graph.AddEdge(vertices[3], vertices[0], 2)
+	graph.AddEdge(vertices[3], vertices[5], 5)
+	graph.AddEdge(vertices[3], vertices[6], 2)
+	graph.AddEdge(vertices[4], vertices[6], 4)
+	graph.AddEdge(vertices[5], vertices[6], 1)
+	graph.AddEdge(vertices[5], vertices[7], 2)
+	graph.AddEdge(vertices[6], vertices[7], 2)
+	graph.AddEdge(vertices[7], vertices[0], 5)
+
+	path := graph.ShortestPath(vertices[0], vertices[5])
+	if path.Distance() >= 0 {
+		t.Logf("path: %s", path.String())
+	}
+}
+
 func TestBidirectionalGraph(t *testing.T) {
 	printResult := func(result map[Vertex]Path) {
 		var keys []Vertex

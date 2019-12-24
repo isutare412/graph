@@ -1,3 +1,4 @@
+// Package graph implements several graph algorithms like Dijkstra, A*, etc.
 package graph
 
 import (
@@ -22,7 +23,8 @@ const (
 )
 
 // Graph implements an adjacency list. You should create a Graph by calling
-// New(Type) function.
+// New(Type) function. As Graph doest have any location or coordinate, Graph
+// cannot use A* algorithm. If you want A* algorithm, use CoordGraph instead.
 type Graph struct {
 	Type
 	vertices   map[VertexID]*vertex
@@ -106,49 +108,76 @@ func (g *Graph) RemoveEdges(from, to Vertex) {
 	}
 }
 
-// ShortestPaths returns shortest paths from source to every other vertices.
-func (g *Graph) ShortestPaths(source Vertex) map[Vertex]Path {
-	var dists = make(map[Vertex]Path)
+func (g *Graph) dijkstra(src *vertex, handler func(*vertex, Path) bool) {
+	var shortestPaths = make(map[*vertex]Path)
 	for _, v := range g.vertices {
-		if v != source.vertex {
-			dists[v.container] = Path{}
+		if v != src {
+			shortestPaths[v] = Path{}
 		}
 	}
 
-	var distHeap = distanceHeap(make([]edge, 0, len(dists)+1))
-	distHeap = append(distHeap, edge{
-		to:     source.vertex,
-		weight: 0,
-	})
-	for v := range dists {
+	var distHeap = distanceHeap(make([]edge, 0, len(g.vertices)))
+	for _, v := range g.vertices {
+		weight := -1
+		if v == src {
+			weight = 0
+		}
 		distHeap = append(distHeap, edge{
-			to:     v.vertex,
-			weight: -1,
+			to:     v,
+			weight: weight,
 		})
 	}
 	heap.Init(&distHeap)
 
-	// Dijkstra's algorithm
 	entireSize := len(distHeap)
 	for i := 0; i < entireSize; i++ {
 		closestEdge := heap.Pop(&distHeap).(edge)
 		if closestEdge.weight < 0 {
 			break
 		}
+		// stop finding paths if handler returns false.
+		if closestEdge.to != src &&
+			!handler(closestEdge.to, shortestPaths[closestEdge.to]) {
+			break
+		}
 		for _, e := range closestEdge.to.outgoing {
-			if e.to == source.vertex {
+			if e.to == src {
 				continue
 			}
 			newW := closestEdge.weight + e.weight
-			oldW := dists[e.to.container].Distance()
+			oldW := shortestPaths[e.to].Distance()
 			if oldW < 0 || newW < oldW {
-				fixedPath := dists[closestEdge.to.container]
+				fixedPath := shortestPaths[closestEdge.to]
 				fixedPath.addEdge(e)
-				dists[e.to.container] = fixedPath
+				shortestPaths[e.to] = fixedPath
 				distHeap.update(e.to, newW)
 			}
 		}
 	}
+}
+
+// ShortestPath returns shortest path p from src to dest. You can check whether
+// the path exists by checking p.Destination() or p.Distance(). As g
+// cannot be applied A* algorithm, ShortestPath uses Dijkstra's one instead.
+func (g *Graph) ShortestPath(src, dest Vertex) (p Path) {
+	g.dijkstra(src.vertex, func(v *vertex, shortest Path) bool {
+		if v == dest.vertex {
+			p = shortest
+			return false
+		}
+		return true
+	})
+	return
+}
+
+// ShortestPaths returns shortest paths from source to every vertices which
+// are reachable from source.
+func (g *Graph) ShortestPaths(source Vertex) map[Vertex]Path {
+	var dists = make(map[Vertex]Path)
+	g.dijkstra(source.vertex, func(v *vertex, p Path) bool {
+		dists[v.container] = p
+		return true
+	})
 	return dists
 }
 
