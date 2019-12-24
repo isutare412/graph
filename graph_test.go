@@ -141,7 +141,10 @@ func TestShortestPath(t *testing.T) {
 
 	path := graph.ShortestPath(vertices[0], vertices[5])
 	if path.Distance() >= 0 {
-		t.Logf("path: %s", path.String())
+		path.IterateEdge(func(to Vertex, w int) bool {
+			t.Logf("->%d [%v]", w, to.ID())
+			return true
+		})
 	}
 }
 

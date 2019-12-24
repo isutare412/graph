@@ -251,6 +251,16 @@ func (p Path) Distance() int {
 	return distance
 }
 
+// IterateEdge iterates edges of p sequentially. If handler returns false,
+// iteration will stop.
+func (p Path) IterateEdge(handler func(to Vertex, weight int) bool) {
+	for _, e := range p.edges {
+		if !handler(e.to.container, e.weight) {
+			break
+		}
+	}
+}
+
 func (p Path) String() string {
 	var builder strings.Builder
 	for i, e := range p.edges {
