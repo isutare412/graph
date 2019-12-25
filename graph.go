@@ -4,13 +4,9 @@ package graph
 import (
 	"container/heap"
 	"fmt"
-	"strconv"
 	"strings"
 	"sync"
 )
-
-// VertexID is an identity for each vertex.
-type VertexID int
 
 // Type enumerates type of Graph.
 type Type int8
@@ -24,28 +20,15 @@ const (
 
 // Graph implements an adjacency list. You should create a Graph by calling
 // New(Type) function. As Graph doest have any location or coordinate, Graph
-// cannot use A* algorithm. If you want A* algorithm, use CoordGraph instead.
+// cannot use A* algorithm. If you want A* algorithm, use CGraph instead.
 type Graph struct {
 	Type
-	vertices   map[VertexID]*vertex
+	vertices   map[VertexID]vertexible
 	generateID func() VertexID
 }
 
-// Vertex of graph. It is safe to copy Vertex.
-type Vertex struct {
-	vertex *vertex
-	// Value stores user defined values.
-	Value *interface{}
-}
-
-type vertex struct {
-	id        VertexID
-	outgoing  []edge
-	container Vertex
-}
-
 type edge struct {
-	to     *vertex
+	to     vertexible
 	weight int
 }
 
@@ -57,18 +40,14 @@ type Path struct {
 // distanceHeap implements min-heap interface for algorithm operations.
 type distanceHeap []edge
 
-func (id VertexID) String() string {
-	return strconv.Itoa(int(id))
-}
-
 // NewVertex returns a new vertex which is ready to use.
 func (g *Graph) NewVertex() Vertex {
-	newVertex := &vertex{id: g.generateID()}
+	newVertex := &vertex{VertexID: g.generateID()}
 	newVertex.container = Vertex{
 		vertex: newVertex,
 		Value:  new(interface{}),
 	}
-	g.vertices[newVertex.id] = newVertex
+	g.vertices[newVertex.VertexID] = newVertex
 	return newVertex.container
 }
 
@@ -87,15 +66,9 @@ func (g *Graph) RemoveVertex(id VertexID) bool {
 
 // AddEdge adds a new edge with weight from Vertex to Vertex.
 func (g *Graph) AddEdge(from, to Vertex, weight int) {
-	from.vertex.outgoing = append(from.vertex.outgoing, edge{
-		to:     to.vertex,
-		weight: weight,
-	})
+	from.vertex.addEdge(to.vertex, weight)
 	if g.Type == Bidirectional {
-		to.vertex.outgoing = append(to.vertex.outgoing, edge{
-			to:     from.vertex,
-			weight: weight,
-		})
+		to.vertex.addEdge(from.vertex, weight)
 	}
 }
 
@@ -108,8 +81,8 @@ func (g *Graph) RemoveEdges(from, to Vertex) {
 	}
 }
 
-func (g *Graph) dijkstra(src *vertex, handler func(*vertex, Path) bool) {
-	var shortestPaths = make(map[*vertex]Path)
+func (g *Graph) dijkstra(src vertexible, handler func(vertexible, Path) bool) {
+	var shortestPaths = make(map[vertexible]Path)
 	for _, v := range g.vertices {
 		if v != src {
 			shortestPaths[v] = Path{}
@@ -140,7 +113,7 @@ func (g *Graph) dijkstra(src *vertex, handler func(*vertex, Path) bool) {
 			!handler(closestEdge.to, shortestPaths[closestEdge.to]) {
 			break
 		}
-		for _, e := range closestEdge.to.outgoing {
+		for _, e := range closestEdge.to.edges() {
 			if e.to == src {
 				continue
 			}
@@ -160,7 +133,7 @@ func (g *Graph) dijkstra(src *vertex, handler func(*vertex, Path) bool) {
 // the path exists by checking p.Destination() or p.Distance(). As g
 // cannot be applied A* algorithm, ShortestPath uses Dijkstra's one instead.
 func (g *Graph) ShortestPath(src, dest Vertex) (p Path) {
-	g.dijkstra(src.vertex, func(v *vertex, shortest Path) bool {
+	g.dijkstra(src.vertex, func(v vertexible, shortest Path) bool {
 		if v == dest.vertex {
 			p = shortest
 			return false
@@ -174,8 +147,8 @@ func (g *Graph) ShortestPath(src, dest Vertex) (p Path) {
 // are reachable from source.
 func (g *Graph) ShortestPaths(source Vertex) map[Vertex]Path {
 	var dists = make(map[Vertex]Path)
-	g.dijkstra(source.vertex, func(v *vertex, p Path) bool {
-		dists[v.container] = p
+	g.dijkstra(source.vertex, func(v vertexible, p Path) bool {
+		dists[v.accessor()] = p
 		return true
 	})
 	return dists
@@ -189,44 +162,8 @@ func (g *Graph) String() string {
 	return result.String()
 }
 
-// ID returns VertexID(int).
-func (v Vertex) ID() VertexID {
-	return v.vertex.id
-}
-
-func (v *vertex) removeEdge(dest VertexID) (removed bool) {
-	for i := 0; i < len(v.outgoing); i++ {
-		if v.outgoing[i].to.id == dest {
-			v.outgoing[i] = v.outgoing[len(v.outgoing)-1]
-			v.outgoing = v.outgoing[:len(v.outgoing)-1]
-			i--
-			removed = true
-		}
-	}
-	return
-}
-
-func (v *vertex) String() string {
-	format := func(id VertexID) string {
-		return "[" + id.String() + "]"
-	}
-	var result strings.Builder
-	result.WriteString(format(v.id))
-	if len(v.outgoing) <= 0 {
-		return result.String()
-	}
-
-	result.WriteString(" -> ")
-	var IDs = make([]string, 0, len(v.outgoing))
-	for _, e := range v.outgoing {
-		IDs = append(IDs, format(e.to.id))
-	}
-	result.WriteString(strings.Join(IDs, ", "))
-	return result.String()
-}
-
 func (e edge) String() string {
-	return fmt.Sprintf("->%d [%v]", e.weight, e.to.id)
+	return fmt.Sprintf("->%d [%v]", e.weight, e.to.id())
 }
 
 // Destination returns the destination of current path. ok is false if
@@ -235,7 +172,7 @@ func (p Path) Destination() (dest Vertex, ok bool) {
 	if len(p.edges) == 0 {
 		return dest, false
 	}
-	return p.edges[len(p.edges)-1].to.container, true
+	return p.edges[len(p.edges)-1].to.accessor(), true
 }
 
 // Distance returns a total distance to the destination. Returns negative
@@ -255,7 +192,7 @@ func (p Path) Distance() int {
 // iteration will stop.
 func (p Path) IterateEdge(handler func(to Vertex, weight int) bool) {
 	for _, e := range p.edges {
-		if !handler(e.to.container, e.weight) {
+		if !handler(e.to.accessor(), e.weight) {
 			break
 		}
 	}
@@ -307,7 +244,7 @@ func (d *distanceHeap) Pop() interface{} {
 	return popped
 }
 
-func (d distanceHeap) update(v *vertex, weight int) {
+func (d distanceHeap) update(v vertexible, weight int) {
 	for i, e := range d {
 		if v == e.to {
 			d[i].weight = weight
@@ -321,7 +258,7 @@ func (d distanceHeap) update(v *vertex, weight int) {
 func New(t Type) *Graph {
 	return &Graph{
 		Type:     t,
-		vertices: make(map[VertexID]*vertex),
+		vertices: make(map[VertexID]vertexible),
 		generateID: func() func() VertexID {
 			var vertexIDLast VertexID
 			var vertexIDLock sync.Mutex

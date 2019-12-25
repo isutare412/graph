@@ -20,7 +20,7 @@ func TestPrintGraph(t *testing.T) {
 	graph.AddEdge(vertices[3], vertices[5], 4)
 	graph.AddEdge(vertices[4], vertices[5], 5)
 	graph.AddEdge(vertices[5], vertices[1], 6)
-	t.Log(graph.String())
+	t.Log(graph)
 }
 
 func TestRemoveEdges(t *testing.T) {
@@ -39,10 +39,10 @@ func TestRemoveEdges(t *testing.T) {
 	graph.AddEdge(vertices[3], vertices[5], 4)
 	graph.AddEdge(vertices[4], vertices[5], 5)
 	graph.AddEdge(vertices[5], vertices[1], 6)
-	t.Log(graph.String())
+	t.Log(graph)
 
 	graph.RemoveEdges(vertices[0], vertices[2])
-	t.Log(graph.String())
+	t.Log(graph)
 }
 
 func TestShortestPaths(t *testing.T) {
